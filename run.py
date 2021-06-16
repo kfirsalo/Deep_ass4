@@ -29,9 +29,9 @@ def train(num_epochs, train_data_loader, dev_data_loader, model, device, lr, wei
             optimizer.zero_grad()
 
             chars_seq1, words_seq1, len_seq1, len_words1, chars_seq2, words_seq2, len_seq2, len_words2, tags = batch
-            chars_seq1, words_seq1, chars_seq2, words_seq2, tags = chars_seq1.to(device), words_seq1.to(device), \
-                                                                   chars_seq2.to(device), words_seq2.to(device), tags.to(device)
-            preds = model(chars_seq1, words_seq1, chars_seq2, words_seq2)
+            chars_seq1, words_seq1, chars_seq2, words_seq2 = chars_seq1.to(device), words_seq1.to(device), \
+                                                                   chars_seq2.to(device), words_seq2.to(device)
+            preds = model(chars_seq1, words_seq1, chars_seq2, words_seq2, len_seq1, len_seq2, len_words1, len_words2)
 
     #         new_preds = torch.cat([preds[i, :ln] for i, ln in enumerate(len_seq)])
     #         new_tags = torch.cat([tag[i, :ln] for i, ln in enumerate(len_seq)])
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=train_dataset.collate_fn)
     dev_loader = None
     device = get_device(device=GPU)
-    model = SNLIModel(len(train_dataset.words_to_index), train_dataset.unknown_words_in_train, len(train_dataset.chars_to_index),
-                      word_embed_dim=300, char_embed_dim=100, pre_trained_embedding=pre_trained_vocab, device=device)
+    model = SNLIModel(len(train_dataset.words_to_index), train_dataset.words_to_index, train_dataset.unknown_words_in_train, len(train_dataset.chars_to_index),
+                      word_embed_dim=300, char_embed_dim=15, char_embed_dim_out=100, hidden_lstm_dim=100, pre_trained_embedding=pre_trained_vocab, dropout=0.5, device=device)
     final_acc_dev, final_model = train(5, train_loader, dev_loader, model, device, 0.0004,
                                        0, train_dataset.index_to_tag)
