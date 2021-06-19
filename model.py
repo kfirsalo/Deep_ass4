@@ -56,7 +56,7 @@ class SNLIModel(nn.Module):
         # self.lstm_char_dim = lstm_chars_dim
         self.device = device
 
-        self.word_embedding = nn.Embedding(num_embeddings=len(pre_trained_embedding) + unknown_words_size,
+        self.word_embedding = nn.Embedding(num_embeddings=word_vocab_size,
                                            embedding_dim=word_embed_dim)
         for idx, vector in pre_trained_embedding.items():
             self.word_embedding.weight.data[words_to_index[idx]] = torch.tensor(vector)

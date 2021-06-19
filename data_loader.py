@@ -22,13 +22,20 @@ class SNLIDataset(Dataset):
         batch size * length of longest sentence. A padded word will have a length of 0.
     """
 
-    def __init__(self, path, pre_trained_vocab_path=None, exist_tags=None):
+    def __init__(self, path, pre_trained_vocab_path=None, exist_tags=None, train_word_vocab=None, train_char_vocab=None):
         self.unknown_key = '__unknown__'  # define symbol for unknown word
-        with open(pre_trained_vocab_path, "rb") as f:
-            self.pre_trained_vocab = pickle.load(f)
-        keys = list(self.pre_trained_vocab.keys())
-        self.words_to_index = {keys[i]: i for i in range(len(self.pre_trained_vocab))}
-        self.chars_to_index, self.tag_to_index = {}, {"entailment": 0, "contradiction": 1, "neutral": 2}
+        if train_word_vocab is None:
+            with open(pre_trained_vocab_path, "rb") as f:
+                self.pre_trained_vocab = pickle.load(f)
+            keys = list(self.pre_trained_vocab.keys())
+            for i, anomaly in enumerate(keys):
+                if len(self.pre_trained_vocab[anomaly]) < 300:
+                    del self.pre_trained_vocab[keys[i]]
+            keys = list(self.pre_trained_vocab.keys())
+            self.words_to_index = {keys[i]: i for i in range(len(self.pre_trained_vocab))}
+            self.chars_to_index, self.tag_to_index = {}, {"entailment": 0, "contradiction": 1, "neutral": 2}
+        else:
+            self.words_to_index, self.chars_to_index, self.tag_to_index = train_word_vocab, train_char_vocab, exist_tags
         self.data, self.index_to_tag, self.index_to_char, self.unknown_words_in_train = self.load_data(path)
         self.index_to_word = {i: w for w, i in self.words_to_index.items()}
 
@@ -121,7 +128,7 @@ class SNLIDataset(Dataset):
     def collate_fn(self, batch):
         sentence1 = [batch[i][:4] for i in range(len(batch))]
         sentence2 = [batch[i][4:8] for i in range(len(batch))]
-        labels = [batch[i][8] for i in range(len(batch))]
+        labels = torch.tensor([batch[i][8] for i in range(len(batch))], dtype=torch.long)
         a = self._second_padding(sentence1)
         b = self._second_padding(sentence2)
         return a + b + [labels]
@@ -137,7 +144,7 @@ class SNLIDataset(Dataset):
                torch.tensor(padded_sentence[3], dtype=torch.int), torch.tensor(padded_sentence[4]), torch.tensor(
             padded_sentence[5]), \
                torch.tensor(padded_sentence[6], dtype=torch.int), torch.tensor(padded_sentence[7], dtype=torch.int), \
-               torch.tensor(padded_sentence[8], dtype=torch.long)
+               padded_sentence[8]
 
     # def load_data(self, path, vocab=None, chars_vocab=None, exist_tags=None):
     #     if vocab is None:  # train mode
