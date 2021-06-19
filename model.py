@@ -36,9 +36,9 @@ The vector enters an MLP, implemented as follows:
 
 
 class SNLIModel(nn.Module):
-    def __init__(self, word_vocab_size, words_to_index, unknown_words_size, char_vocab_size, word_embed_dim,
+    def __init__(self, word_vocab_size, words_to_index, char_vocab_size, word_embed_dim,
                  char_embed_dim, char_embed_dim_out, hidden_lstm_dim,
-                 pre_trained_embedding, dropout, device="cuda:1"):
+                 pre_trained_embedding, dropout, device="cuda:1", is_gradient=False):
         """
         :param word_vocab_size: The number of different words we collected in the training corpus.
         :param char_vocab_size: The number of different characters we collected in the training corpus.
@@ -56,13 +56,14 @@ class SNLIModel(nn.Module):
         # self.lstm_char_dim = lstm_chars_dim
         self.device = device
 
-        self.word_embedding = nn.Embedding(num_embeddings=word_vocab_size,
-                                           embedding_dim=word_embed_dim)
+        self.word_embedding = nn.Embedding(num_embeddings=word_vocab_size, embedding_dim=word_embed_dim)
+        self.chars_embedding = nn.Embedding(num_embeddings=char_vocab_size, embedding_dim=char_embed_dim)
+        self.word_embedding.weight.data, self.chars_embedding.weight.data = map(
+            self._randn_weights, [self.word_embedding.weight.data, self.chars_embedding.weight.data])
         for idx, vector in pre_trained_embedding.items():
             self.word_embedding.weight.data[words_to_index[idx]] = torch.tensor(vector)
-        self.word_embedding.weight.requires_grad = False
+        self.word_embedding.weight.requires_grad = is_gradient
 
-        self.chars_embedding = nn.Embedding(num_embeddings=char_vocab_size, embedding_dim=char_embed_dim)
         self.cnn_1 = nn.Conv2d(in_channels=1, out_channels=char_embed_dim_out, kernel_size=(1, char_embed_dim))
         self.cnn_2 = nn.Conv2d(in_channels=1, out_channels=char_embed_dim_out, kernel_size=(3, char_embed_dim))
         self.cnn_3 = nn.Conv2d(in_channels=1, out_channels=char_embed_dim_out, kernel_size=(5, char_embed_dim))
@@ -80,6 +81,81 @@ class SNLIModel(nn.Module):
         self.linear2 = nn.Linear(12 * (embed_dim + 2 * hidden_lstm_dim) + hidden_lstm_dim, hidden_lstm_dim)
         self.dropout2 = nn.Dropout(dropout)
         self.linear3 = nn.Linear(hidden_lstm_dim, 3)
+
+        self._init_layers(char_embed_dim)
+
+    def _init_layers(self, char_embed_dim):
+        """
+        Initialize layer weights and pre-trained embedding.
+        All biases are initialized as zeros.
+        """
+        self.cnn_1.weight.data = self._cnn_weights(self.cnn_1.weight.data, 1, char_embed_dim)
+        self.cnn_2.weight.data = self._cnn_weights(self.cnn_2.weight.data, 3, char_embed_dim)
+        self.cnn_3.weight.data = self._cnn_weights(self.cnn_3.weight.data, 5, char_embed_dim)
+
+        self.bi_lstm1.weight_ih_l0.data, self.bi_lstm1.weight_ih_l0_reverse.data, self.bi_lstm2.weight_ih_l0.data, \
+            self.bi_lstm2.weight_ih_l0_reverse.data, self.bi_lstm3.weight_ih_l0.data, \
+            self.bi_lstm3.weight_ih_l0_reverse.data = map(
+                self._randn_weights, [self.bi_lstm1.weight_ih_l0.data, self.bi_lstm1.weight_ih_l0_reverse.data,
+                                      self.bi_lstm2.weight_ih_l0.data, self.bi_lstm2.weight_ih_l0_reverse.data,
+                                      self.bi_lstm3.weight_ih_l0.data, self.bi_lstm3.weight_ih_l0_reverse.data])
+        self.bi_lstm1.weight_hh_l0.data, self.bi_lstm1.weight_hh_l0_reverse.data, self.bi_lstm2.weight_hh_l0.data, \
+            self.bi_lstm2.weight_hh_l0_reverse.data, self.bi_lstm3.weight_hh_l0.data, \
+            self.bi_lstm3.weight_hh_l0_reverse.data = map(
+                self._orthogonal_weights, [self.bi_lstm1.weight_hh_l0.data, self.bi_lstm1.weight_hh_l0_reverse.data,
+                                           self.bi_lstm2.weight_hh_l0.data, self.bi_lstm2.weight_hh_l0_reverse.data,
+                                           self.bi_lstm3.weight_hh_l0.data, self.bi_lstm3.weight_hh_l0_reverse.data])
+
+        self.linear1.weight.data, self.linear2.weight.data, self.linear3.weight.data = map(
+            self._randn_weights, [self.linear1.weight.data, self.linear2.weight.data, self.linear3.weight.data])
+
+        self.cnn_1.bias.data, self.cnn_2.bias.data, self.cnn_3.bias.data, self.bi_lstm1.bias_ih_l0.data, \
+            self.bi_lstm1.bias_ih_l0_reverse.data, self.bi_lstm2.bias_ih_l0.data, self.bi_lstm2.bias_ih_l0_reverse.data, \
+            self.bi_lstm3.bias_ih_l0.data, self.bi_lstm3.bias_ih_l0_reverse.data, self.bi_lstm1.bias_hh_l0.data, \
+            self.bi_lstm1.bias_hh_l0_reverse.data, self.bi_lstm2.bias_hh_l0.data, self.bi_lstm2.bias_hh_l0_reverse.data, \
+            self.bi_lstm3.bias_hh_l0.data, self.bi_lstm3.bias_hh_l0_reverse.data, self.linear1.bias.data, \
+            self.linear2.bias.data, self.linear3.bias.data = map(
+                self._biases, [self.cnn_1.bias.data, self.cnn_2.bias.data, self.cnn_3.bias.data, self.bi_lstm1.bias_ih_l0.data,
+                               self.bi_lstm1.bias_ih_l0_reverse.data, self.bi_lstm2.bias_ih_l0.data,
+                               self.bi_lstm2.bias_ih_l0_reverse.data, self.bi_lstm3.bias_ih_l0.data,
+                               self.bi_lstm3.bias_ih_l0_reverse.data, self.bi_lstm1.bias_hh_l0.data,
+                               self.bi_lstm1.bias_hh_l0_reverse.data, self.bi_lstm2.bias_hh_l0.data,
+                               self.bi_lstm2.bias_hh_l0_reverse.data, self.bi_lstm3.bias_hh_l0.data,
+                               self.bi_lstm3.bias_hh_l0_reverse.data, self.linear1.bias.data,
+                               self.linear2.bias.data, self.linear3.bias.data])
+
+    @staticmethod
+    def _orthogonal_weights(weight_tensor):
+        """
+        Initialize a weight tensor of random orthogonal weights, as done in the paper's implementation.
+        The input tensor is assumed to be square.
+        """
+        randn_tensor = 0.01 * torch.randn_like(weight_tensor)
+        r1, r2, r3, r4 = randn_tensor.split(round(randn_tensor.size(0) / 4))
+        (u1, _, _), (u2, _, _), (u3, _, _), (u4, _, _) = map(torch.svd, [r1, r2, r3, r4])
+        return torch.cat([u1, u2, u3, u4], dim=0)
+
+    @staticmethod
+    def _randn_weights(weight_tensor):
+        """
+        Initialize a random normal weight tensor, as done in the paper's implementation.
+        """
+        final_weight_tensor = 0.01 * torch.randn_like(weight_tensor)
+        return final_weight_tensor
+
+    @staticmethod
+    def _cnn_weights(weight_tensor, filter_length, char_embed_dim):
+        """
+        Initialize a random uniform tensor for the CNN layers, as done in the paper's implementation.
+        """
+        final_weight_tensor = (4. / (3 * filter_length * char_embed_dim)) ** 0.5 * torch.rand_like(weight_tensor) - \
+            torch.tensor((1. / (3 * filter_length * char_embed_dim)) ** 0.5).type_as(weight_tensor)
+        return final_weight_tensor
+
+    @staticmethod
+    def _biases(bias_tensor):
+        bias_tensor = torch.zeros_like(bias_tensor)
+        return bias_tensor
 
     @staticmethod
     def original_size(seq, dim=1):

@@ -33,15 +33,15 @@ class SNLIDataset(Dataset):
                     del self.pre_trained_vocab[keys[i]]
             keys = list(self.pre_trained_vocab.keys())
             self.words_to_index = {keys[i]: i for i in range(len(self.pre_trained_vocab))}
-            self.chars_to_index, self.tag_to_index = {}, {"entailment": 0, "contradiction": 1, "neutral": 2}
+            self.words_to_index.update({self.unknown_key: len(self.words_to_index)})
+            self.chars_to_index, self.tag_to_index = {"__pad__": 0, self.unknown_key: 1}, {"entailment": 0, "contradiction": 1, "neutral": 2}
+            self.data, self.index_to_tag, self.index_to_char, self.unknown_words_in_train = self.load_data(path, to_add=True)
         else:
             self.words_to_index, self.chars_to_index, self.tag_to_index = train_word_vocab, train_char_vocab, exist_tags
-        self.data, self.index_to_tag, self.index_to_char, self.unknown_words_in_train = self.load_data(path)
+            self.data, self.index_to_tag, self.index_to_char, self.unknown_words_in_train = self.load_data(path, to_add=False)
         self.index_to_word = {i: w for w, i in self.words_to_index.items()}
 
-    def load_data(self, path):
-        self.chars_to_index.update({"__pad__": 0, self.unknown_key: 1})
-        to_add = True
+    def load_data(self, path, to_add=True):
         final_sequences = []
         unknown_words_in_train = 0
         with open(path, "r") as file:
@@ -52,11 +52,9 @@ class SNLIDataset(Dataset):
                 if label == "-":
                     continue
                 sentence_chars1, sentence_words1, sentence_chars_len1, words_len1, unknown_words_in_train = self.sentence_parse(
-                    sentence1,
-                    unknown_words_in_train, to_add)
+                    sentence1, unknown_words_in_train, to_add)
                 sentence_chars2, sentence_words2, sentence_chars_len2, words_len2, unknown_words_in_train = self.sentence_parse(
-                    sentence2,
-                    unknown_words_in_train, to_add)
+                    sentence2, unknown_words_in_train, to_add)
                 final_sequences.append([sentence_chars1, sentence_words1, sentence_chars_len1, words_len1,
                                         sentence_chars2, sentence_words2, sentence_chars_len2, words_len2,
                                         self.tag_to_index[label]])
@@ -145,53 +143,6 @@ class SNLIDataset(Dataset):
             padded_sentence[5]), \
                torch.tensor(padded_sentence[6], dtype=torch.int), torch.tensor(padded_sentence[7], dtype=torch.int), \
                padded_sentence[8]
-
-    # def load_data(self, path, vocab=None, chars_vocab=None, exist_tags=None):
-    #     if vocab is None:  # train mode
-    #         words_to_index, chars_to_index, tag_to_index = {}, {}, {}
-    #         chars_to_index.update({"__pad__": 0, self.unknown_key: 1})
-    #         words_to_index.update({"__pad__": 0, self.unknown_key: 1})
-    #         to_add = True
-    #     else:  # dev mode
-    #         words_to_index, chars_to_index, tag_to_index = vocab, chars_vocab, exist_tags
-    #         to_add = False
-    #     word_index, char_index, tag_index = len(words_to_index), len(chars_to_index), len(tag_to_index)
-    #     sentences, sentence_chars, sentence_words, tags, words_len = [], [], [], [], []
-    #     unique_words = set([])
-    #     with open(path, "r") as f:
-    #         for line in f:
-    #             line = line.strip()
-    #             if line:
-    #                 word = line.split()[0]
-    #                 tag = line.split()[1]
-    #                 word_as_chars = []
-    #                 unique_words.add(word)
-    #                 words_len.append(len(word))
-    #                 for c in word:
-    #                     if c not in chars_to_index:
-    #                         if not to_add:
-    #                             c = self.unknown_key
-    #                         else:
-    #                             chars_to_index, char_index = add_key_to_dict(chars_to_index, c, char_index)
-    #                     word_as_chars.append(chars_to_index[c])
-    #                 word = change_words(word)  # lowercase and replace digits with DG as explained in pdf
-    #                 if word not in words_to_index:
-    #                     if not to_add:
-    #                         word = self.unknown_key
-    #                     else:
-    #                         words_to_index, word_index = add_key_to_dict(words_to_index, word, word_index)
-    #                 if tag not in tag_to_index:
-    #                     if to_add:
-    #                         tag_to_index, tag_index = add_key_to_dict(tag_to_index, tag, tag_index)
-    #                 sentence_chars.append(word_as_chars)
-    #                 sentence_words.append(words_to_index[word])
-    #                 tags.append(tag_to_index[tag])
-    #             else:
-    #                 if len(sentence_chars) != 0:  # no need for empty sentences
-    #                     sentences.append((sentence_chars, sentence_words, tags, len(sentence_chars), words_len))
-    #                 sentence_chars, sentence_words, tags, words_len = [], [], [], []
-    #
-    #     return words_to_index, chars_to_index, index_to_char, tag_to_index, index_to_tag, sentences, unique_words
 
 
 # def main():
