@@ -9,11 +9,10 @@ from torch import nn, optim
 from time import time
 import torch
 import argparse
+from utils import *
 
-GPU = 0
 
-
-def train(num_epochs, train_data_loader, dev_data_loader, test_data_loader, model, device, lr, weight_decay, wait_n,
+def train(num_epochs, train_data_loader, dev_data_loader, test_data_loader, model, device, lr, weight_decay, wait_n, clip_c,
           epochs_print=True):
     model.to(device)
     criterion = torch.nn.CrossEntropyLoss()
@@ -41,6 +40,7 @@ def train(num_epochs, train_data_loader, dev_data_loader, test_data_loader, mode
             preds = model(chars_seq1, words_seq1, chars_seq2, words_seq2, len_seq1, len_seq2, len_words1, len_words2)
             loss = criterion(preds, tags)
             loss.backward()
+            clip_grads(model, clip_c)
             optimizer.step()
             total_train_current_loss += loss.item()
             preds = torch.argmax(preds, dim=1)
@@ -183,21 +183,26 @@ if __name__ == "__main__":
                              "indicating on which gpu to run, assuming it is possible. For example: cuda:0. (str)")
     parser.add_argument("--plot", type=str, default="False",
                         help="Whether to plot the requested graph. (str)")
+    parser.add_argument("--clip_c", type=str, default="False",
+                        help="Whether to plot the requested graph. (str)")
 
     params = {"word_embed_dim": 300,  # Word embedding dimension (always 300 if our GloVe is used)
               "char_embed_dim": 15,  # Character embedding dimension
               "dropout": 0.5,  # Dropout rate in all dropout
               "char_embed_out": 100,  # Output dimension of character embedding from each CNN layer
               "lstm_hid": 600,  # Hidden layer size in LSTMs
-              "epochs": 30,  # Maximal number of epochs to run the model
+              "epochs": 10,  # Maximal number of epochs to run the model
               "batch_size": 32,  # Mini-batch size
               "lr": 0.0004,  # Initial learning rate (might get smaller when running)
               "reg": 0.,  # L2 regularization coefficient
               "wait_n": 1,  # Number of epochs to wait until changing the learning rate to half its value
-              "is_grad": True
+              "is_grad": False,
+              "clip_c": 10
     }
 
     args = parser.parse_args()
+
+    device = args.device
 
     print("...Start The Run...")
     glove_path = args.gloveFile
@@ -217,10 +222,11 @@ if __name__ == "__main__":
     test_dataset = SNLIDataset(test_path, train_word_vocab=train_dataset.words_to_index,
                                train_char_vocab=train_dataset.chars_to_index, exist_tags=train_dataset.tag_to_index)
 
+    print("finish make the datasets!!! hurray!!")
     train_loader = DataLoader(train_dataset, batch_size=params["batch_size"], shuffle=True, collate_fn=train_dataset.collate_fn)
     dev_loader = DataLoader(dev_dataset, batch_size=params["batch_size"], shuffle=True, collate_fn=dev_dataset.collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=params["batch_size"], shuffle=False, collate_fn=test_dataset.collate_fn)
-    device = get_device(device=GPU)
+    device = get_device(device=device)
     #if draw_plot:
 #   run_for_plot(train_dataset, train_loader, dev_loader, test_loader, device, weight_decays=[0, 3e-5])
     #else:
@@ -231,7 +237,8 @@ if __name__ == "__main__":
                       pre_trained_embedding=train_dataset.pre_trained_vocab, dropout=params["dropout"], device=device,
                       is_gradient=params["is_grad"])
     final_acc, final_loss, final_model = train(params["epochs"], train_loader, dev_loader, test_loader, model,
-                                               device, params["lr"], params["reg"], params["wait_n"], epochs_print=True)
+                                               device, params["lr"], params["reg"], params["wait_n"], clip_c=params["clip_c"],
+                                               epochs_print=False)
     if draw_plot:
         plot_measure(final_acc, mode="Accuracy", gradient=params["is_grad"], weight_decay=params["reg"])
         plot_measure(final_loss, mode="Loss", gradient=params["is_grad"], weight_decay=params["reg"])

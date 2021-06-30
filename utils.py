@@ -111,6 +111,43 @@ def plot_measure(measures, mode="Accuracy", gradient=False, weight_decay=0):
     plt.savefig(plot_path)
 
 
+# def plot_measure_pkl(x_len=10):
+#     """
+#     Receives the accuracies of all four representations and the mode (=task, 'pos' or 'ner') and plots the learning
+#     curves.
+#     The accuracies are assumed to be collected in the order requested in the question (we assume, for example, that
+#     the results were collected from a dataset that has a number of sentences divisible by 500).
+#     """
+#     epochs = 1 + np.arange(x_len)
+#     epochs = epochs.astype(int)
+#     plt.figure()
+#     pkl_path = Path("pkl")
+#     plot_path = Path("plots")
+#     acc_trial_name = ["Accuracy_gradient=False_weight_decay=0.0", "Accuracy_gradient=False_weight_decay=3e-05",
+#                       "Accuracy_gradient=True_weight_decay=0"]
+#     loss_trial_name = ["Loss_gradient=False_weight_decay=0.0", "Loss_gradient=False_weight_decay=3e-05",
+#                        "Loss_gradient=True_weight_decay=0"]
+#     for acc_name, loss_name in zip(acc_trial_name, loss_trial_name):
+#         acc_path = Path.joinpath(pkl_path, acc_name+".pkl")
+#         acc_plot_path = Path.joinpath(plot_path, acc_name+".png")
+#         loss_path = Path.joinpath(pkl_path, loss_name+".pkl")
+#         loss_plot_path = Path.joinpath(plot_path, loss_name+".png")
+#         with open(acc_path, 'rb') as f:
+#             acc = pickle.load(f)
+#         with open(loss_path, 'rb') as f:
+#             loss = pickle.load(f)
+#         plt.figure(0)
+#         plt.plot(epochs, acc[:x_len])
+#     plt.legend(["train", "dev", "test"])
+#     plt.xlabel("Number Of Epochs")
+#     plt.ylabel("Accuracy")
+#     plt.title(f"Accuracy Per Epoch")
+#     plt.locator_params(axis='x', nbins=len(epochs))
+#     plot_path = Path(f"plots/{mode}_gradient={gradient}_weight_decay={weight_decay}.png")
+#     plot_path.parent.mkdir(parents=True, exist_ok=True)
+#     plt.savefig(plot_path)
+
+
 def plot_loss_acc(scores, mode_task="POS", mode_plot="Loss", part="1"):
     plt.figure(figsize=(9, 7))
     epochs = [i+1 for i in range(len(scores))]
@@ -121,4 +158,17 @@ def plot_loss_acc(scores, mode_task="POS", mode_plot="Loss", part="1"):
     plt.xticks(range(0, len(epochs)+1, 5))
     plt.grid()
     plt.savefig(f"dev_{mode_plot}_{mode_task}_{part}")
+
+
+def clip_grads(model, clip_c):
+    """
+    Apply gradient clipping as the writers did in the paper's implementation:
+    If a gradient is larger than clip_c ** 2, divide it by the 2-norm of all gradients vector times clip_c
+    """
+    total_norm = 0
+    for p in filter(lambda x: x.requires_grad, model.parameters()):
+        total_norm += (p.grad.data ** 2).sum()
+    total_norm = total_norm ** 0.5
+    for p in filter(lambda x: x.requires_grad, model.parameters()):
+        p.grad.data = torch.where(p.grad.data > clip_c ** 2, p.grad.data.mul(1 / (clip_c * total_norm)), p.grad.data)
 
